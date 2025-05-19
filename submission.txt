@@ -1,0 +1,19 @@
+# Proyek ETL untuk Fashion Data
+
+## Setup Python Environment
+Pastikan kamu menggunakan **Python 3.x** dan **conda** sebagai virtual environment.
+
+1. Membuat dan mengaktifkan conda environment:
+   ```bash
+   conda create --name <nama-environment> python=3.12
+   conda activate <nama-environment>
+   pip install -r requirements.txt
+
+# Menjalankan porgram
+python main.py
+
+# Menjalankan unit test pada folder test
+pytest
+
+# URL Google Sheets
+https://docs.google.com/spreadsheets/d/1HtUgHxlhZSxWdgfUffGewvj-FX_Ir1ipyv1i9CI2Evk/edit
