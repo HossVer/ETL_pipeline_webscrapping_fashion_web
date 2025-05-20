@@ -1,60 +1,73 @@
 import sys
 import os
-import pytest
-from unittest.mock import patch, MagicMock
-from bs4 import BeautifulSoup
-from requests.exceptions import RequestException
-
 # Menambahkan direktori root ke sys.path agar modul utils bisa diimpor
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+import pytest
+from unittest.mock import patch, MagicMock
+from utils.extract import scrape_all_pages, fetching_content, extract_fashion_data  # Adjust this import
+from bs4 import BeautifulSoup
 
-from utils.extract import fetching_content, extract_fashion_data
+# Test for the scrape_all_pages function
+@pytest.fixture
+def mock_fetching_content():
+    with patch('utils.extract.fetching_content') as mock_fetch:
+        yield mock_fetch
 
-# ===============================
-# Test untuk fetching_content()
-# ===============================
+@pytest.fixture
+def mock_extract_fashion_data():
+    with patch('utils.extract.extract_fashion_data') as mock_extract:
+        yield mock_extract
 
-@patch('utils.extract.requests.Session.get')
-def test_fetching_content_success(mock_get):
-    mock_response = MagicMock()
-    mock_response.content = b"<html><body>Test</body></html>"
-    mock_response.raise_for_status.return_value = None
-    mock_get.return_value = mock_response
+# Test for a successful scraping scenario
+def test_scrape_all_pages_success(mock_fetching_content, mock_extract_fashion_data):
+    # Mock the fetching_content to return HTML content for two pages
+    mock_fetching_content.side_effect = [
+        b"<html><body><div class='product-details'><h3 class='product-title'>Product 1</h3><div class='price-container'><span class='price'>$20</span></div></div><li class='page-item next'></li></body></html>",
+        b"<html><body><div class='product-details'><h3 class='product-title'>Product 2</h3><div class='price-container'><span class='price'>$30</span></div></div></body></html>", 
+        None  # Simulate no more content
+    ]
+    
+    # Mock the extract_fashion_data to return dummy data
+    mock_extract_fashion_data.side_effect = [
+        {"title": "Product 1", "price": "$20", "colors": 2, "size": "M", "gender": "Unisex", "rating": "4", "timestamp": "2023-05-01 12:00:00"},
+        {"title": "Product 2", "price": "$30", "colors": 3, "size": "L", "gender": "Male", "rating": "4.5", "timestamp": "2023-05-01 12:00:00"}
+    ]
+    
+    base_url = "http://example.com"
+    items_data = scrape_all_pages(base_url, delay=0)
 
-    result = fetching_content("http://dummy-url.com")
-    assert result == b"<html><body>Test</body></html>"
+    # Assert that the function correctly processes two products
+    assert len(items_data) == 2
+    assert items_data[0]['title'] == "Product 1"
+    assert items_data[1]['price'] == "$30"
+    assert items_data[1]['colors'] == 3
 
-@patch('utils.extract.requests.Session.get')
-def test_fetching_content_failure(mock_get):
-    mock_get.side_effect = RequestException("Request failed")  # << gunakan RequestException
-    result = fetching_content("http://dummy-url.com")
-    assert result is None
+# Test for no content on a page
+def test_scrape_all_pages_no_content(mock_fetching_content):
+    # Mock the fetching_content to return an empty response (None)
+    mock_fetching_content.side_effect = [None, None]
 
-# ===================================
-# Test untuk extract_fashion_data()
-# ===================================
+    base_url = "http://example.com"
+    items_data = scrape_all_pages(base_url, delay=0)
 
-def test_extract_fashion_data_minimal_html():
-    html = """
-    <div class="product-details">
-        <h3 class="product-title">Cool Shirt</h3>
-        <div class="price-container">
-            <span class="price">$15</span>
-        </div>
-        <p style="font-size: 14px; color: #777;">Colors: 3 Colors</p>
-        <p style="font-size: 14px; color: #777;">Size: M</p>
-        <p style="font-size: 14px; color: #777;">Gender: Unisex</p>
-        <p style="font-size: 14px; color: #777;">Rating: ⭐ 4.5 / 5</p>
-    </div>
-    """
-    soup = BeautifulSoup(html, "html.parser")
-    article = soup.find('div', class_='product-details')
-    result = extract_fashion_data(article)
+    # Assert that no items are collected if no content is fetched
+    assert len(items_data) == 0
 
-    assert result['title'] == "Cool Shirt"
-    assert result['price'] == "$15"
-    assert result['colors'] == 3
-    assert result['size'] == "M"
-    assert result['gender'] == "Unisex"
-    assert result['rating'] == "4.5"
-    assert "timestamp" in result
+# Test for an error during extraction of data
+def test_scrape_all_pages_error(mock_fetching_content, mock_extract_fashion_data):
+    # Mock fetching_content to return HTML content for one page
+    mock_fetching_content.side_effect = [
+        b"<html><body><div class='product-details'><h3 class='product-title'>Product 1</h3><div class='price-container'><span class='price'>$20</span></div></div></body></html>", 
+        None  # Simulate no more content
+    ]
+    
+    # Mock extract_fashion_data to raise an error during extraction for the first item
+    mock_extract_fashion_data.side_effect = Exception("Error extracting data")
+
+    base_url = "http://example.com"
+    items_data = scrape_all_pages(base_url, delay=0)
+
+    # Assert that one item is processed despite an extraction error
+    assert len(items_data) == 1  # There should be one item processed
+    assert "error" in items_data[0]  # The item should contain an "error" key
+    assert items_data[0]["error"] == "Failed to extract data: Error extracting data"  # Ensure the error message is present

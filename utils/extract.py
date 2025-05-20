@@ -34,7 +34,7 @@ def fetching_content(url):
     except requests.exceptions.RequestException as e:
         print(f"Terjadi kesalahan saat melakukan request terhadap {url}: {e}")
         return None
-    
+   
 def extract_fashion_data(article):
     """
         Mengekstrak informasi katalog berdasarkan umpan artikel yang didapat
@@ -92,10 +92,6 @@ def extract_fashion_data(article):
     return datas
 
 def scrape_all_pages(base_url, delay=1):
-    """
-    Mengambil keseluruhan data dari tiap-tiap halaman webpage
-    dengan mekanisme try-except untuk penanganan error yang lebih baik
-    """
     print("🔄 Memulai proses scraping data")
     items_data = []
     page_num = 1
@@ -103,45 +99,30 @@ def scrape_all_pages(base_url, delay=1):
     while True:
         try:
             # Tentukan URL berdasarkan halaman
-            if page_num == 1:
-                url = base_url
-            else:
-                url = f"{base_url.rstrip('/')}/page{page_num}"
-            
+            url = f"{base_url.rstrip('/')}/page{page_num}" if page_num > 1 else base_url
             print(f"🔼 Scraping halaman: {url}")
             content = fetching_content(url)
 
-            if not content:
-                print("❌ Gagal mengambil konten halaman.")
-                break
+            # Parse content and extract data
+            soup = BeautifulSoup(content, "html.parser") if content else None
+            div_elements = soup.find_all('div', class_='product-details') if soup else []
 
-            try:
-                soup = BeautifulSoup(content, "html.parser")
-                div_elements = soup.find_all('div', class_='product-details')
+            # Try to extract and add data to items_data
+            for div in div_elements:
+                try:
+                    item = extract_fashion_data(div)
+                    items_data.append(item)
+                except Exception as e:
+                    print(f"⚠️ Gagal mengekstrak item: {e}")
+                    # Append a placeholder or some indication that the extraction failed
+                    items_data.append({"error": f"Failed to extract data: {e}"})
 
-                if not div_elements:
-                    print("❌ Tidak ada produk ditemukan, berhenti scraping.")
-                    break
-
-                for div in div_elements:
-                    try:
-                        item = extract_fashion_data(div)
-                        items_data.append(item)
-                    except Exception as e:
-                        print(f"⚠️ Gagal mengekstrak item: {e}")
-                        continue  # lanjut ke produk berikutnya
-
-                # Cek apakah ada tombol "next"
-                next_button = soup.find('li', class_='page-item next')
-                if next_button:
-                    page_num += 1
-                    time.sleep(delay)
-                else:
-                    print("✅ Scraping selesai, tidak ada halaman berikutnya.")
-                    break
-
-            except Exception as e:
-                print(f"⚠️ Gagal memproses halaman: {e}")
+            # Check for next page
+            if soup and soup.find('li', class_='page-item next'):
+                page_num += 1
+                time.sleep(delay)
+            else:
+                print("✅ Scraping selesai, tidak ada halaman berikutnya.")
                 break
 
         except Exception as e:
